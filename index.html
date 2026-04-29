@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="vi" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nguyễn Tài Giáp - Portfolio 3D Experience</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        
+        :root {
+            --primary: #3b82f6;
+            --secondary: #22d3ee;
+            --accent: #818cf8;
+            --bg: #030712;
+        }
+
+        * { cursor: none !important; }
+
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: var(--bg);
+            overflow-x: hidden;
+        }
+
+        /* Noise Overlay */
+        .noise {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 9998;
+            opacity: 0.05;
+            background-image: url("https://grainy-gradients.vercel.app/noise.svg");
+        }
+
+        /* Custom Cursor */
+        .cursor-dot, .cursor-outline {
+            pointer-events: none;
+            position: fixed;
+            top: 0; left: 0;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            z-index: 9999;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .cursor-dot {
+            width: 8px; height: 8px;
+            background-color: var(--primary);
+        }
+        .cursor-outline {
+            width: 40px; height: 40px;
+            border: 2px solid var(--primary);
+            transition: all 0.1s ease-out;
+        }
+
+        /* Preloader */
+        #preloader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg);
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 1s ease;
+        }
+        .loader-bar {
+            width: 200px; height: 2px;
+            background: rgba(255,255,255,0.1);
+            margin-top: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .loader-progress {
+            position: absolute;
+            left: 0; top: 0; height: 100%;
+            width: 0;
+            background: var(--primary);
+            transition: width 0.5s ease;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .text-gradient {
+            background: linear-gradient(135deg, var(--primary), var(--secondary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-size: 200% 200%;
+            animation: gradient-shift 5s ease infinite;
+        }
+
+        @keyframes gradient-shift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .hero-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+            filter: blur(60px);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .floating {
+            animation: floating 6s ease-in-out infinite;
+        }
+
+        @keyframes floating {
+            0%, 100% { transform: translateY(0) rotate(0); }
+            50% { transform: translateY(-20px) rotate(2deg); }
+        }
+
+        .tilt-card {
+            transform-style: preserve-3d;
+            perspective: 1000px;
+        }
+
+        .tilt-content {
+            transform: translateZ(50px);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { 
+            background: #1e293b; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+    </style>
+</head>
+<body class="text-slate-200 selection:bg-blue-500/30">
+
+    <!-- Preloader -->
+    <div id="preloader">
+        <div class="text-3xl font-black text-gradient tracking-tighter mb-4 animate-pulse">giap.id.vn</div>
+        <div class="loader-bar">
+            <div class="loader-progress" id="loader-progress"></div>
+        </div>
+        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mt-4">Initializing Infrastructure...</div>
+    </div>
+
+    <!-- Custom Cursor -->
+    <div class="cursor-dot"></div>
+    <div class="cursor-outline"></div>
+
+    <!-- Noise Overlay -->
+    <div class="noise"></div>
+
+    <!-- 3D Background Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- Navbar -->
+    <nav class="fixed top-0 w-full z-50 glass py-5 px-6 md:px-12 flex justify-between items-center border-b border-white/5">
+        <div class="flex items-center gap-2">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center font-black text-xl shadow-lg shadow-blue-500/20">G</div>
+            <h1 class="text-xl font-bold tracking-tighter">NGUYEN TAI GIAP</h1>
+        </div>
+        <div class="hidden md:flex gap-10 text-[13px] font-bold uppercase tracking-widest text-slate-400">
+            <a href="#about" class="hover:text-blue-400 transition-colors">About</a>
+            <a href="#skills" class="hover:text-blue-400 transition-colors">Skills</a>
+            <a href="#experience" class="hover:text-blue-400 transition-colors">Work</a>
+            <a href="#projects" class="hover:text-blue-400 transition-colors">Projects</a>
+            <a href="#contact" class="hover:text-blue-400 transition-colors">Contact</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative min-h-screen flex flex-col justify-center items-center px-6 overflow-hidden">
+        <div class="hero-glow"></div>
+        <div class="text-center z-10" data-aos="zoom-out" data-aos-duration="1500">
+            <div class="floating inline-block mb-8">
+                <span class="px-5 py-2 rounded-full glass text-[10px] font-black uppercase tracking-[0.3em] text-blue-400 border border-blue-500/20">
+                    Innovative IT Specialist
+                </span>
+            </div>
+            <h1 class="text-6xl md:text-9xl font-black mb-8 tracking-tighter leading-none">
+                CRAFTING <br>
+                <span class="text-gradient">SYSTEMS.</span>
+            </h1>
+            <p class="text-slate-400 max-w-xl text-lg md:text-xl font-medium leading-relaxed mb-12 mx-auto">
+                Tôi là một chuyên viên IT đam mê công nghệ, chuyên về hạ tầng mạng và hệ thống, đang chuyển mình mạnh mẽ sang thế giới lập trình.
+            </p>
+            <div class="flex flex-wrap justify-center gap-6">
+                <a href="#contact" class="group px-10 py-4 bg-white text-black hover:bg-blue-500 hover:text-white rounded-2xl font-bold transition-all duration-500 flex items-center gap-3">
+                    Let's Connect <i data-lucide="arrow-right" class="w-5 h-5 group-hover:translate-x-2 transition-transform"></i>
+                </a>
+                <a href="#projects" class="px-10 py-4 glass rounded-2xl font-bold hover:bg-white/10 transition-all duration-500">
+                    View Portfolio
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="py-40 px-6 md:px-12 max-w-7xl mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-24 items-center">
+            <div data-aos="fade-right" class="relative">
+                <div class="absolute -top-20 -left-20 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl"></div>
+                <h2 class="text-sm font-black text-blue-500 uppercase tracking-[0.4em] mb-4">Background</h2>
+                <h3 class="text-4xl md:text-6xl font-bold mb-10 leading-tight tracking-tighter">Vận hành & <br> Phát triển hạ tầng số.</h3>
+                <p class="text-slate-400 text-lg leading-relaxed mb-12">
+                    Với kinh nghiệm thực chiến trong việc quản trị hệ thống mạng quy mô lớn và vận hành hạ tầng CNTT cho tập đoàn dược phẩm hàng đầu, tôi không chỉ dừng lại ở việc duy trì mà luôn tìm cách tối ưu hóa thông qua tự động hóa và AI.
+                </p>
+                <div class="flex gap-12">
+                    <div>
+                        <div class="text-5xl font-black text-white mb-2 tracking-tighter">CCNA</div>
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Global Certified</div>
+                    </div>
+                    <div class="w-[1px] h-16 bg-white/10"></div>
+                    <div>
+                        <div class="text-5xl font-black text-white mb-2 tracking-tighter">3.0</div>
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">GPA Performance</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bento Grid Skills -->
+            <div class="grid grid-cols-2 gap-6" data-aos="fade-left">
+                <div class="col-span-2 p-10 glass rounded-[2.5rem] tilt-card">
+                    <div class="tilt-content">
+                        <i data-lucide="network" class="w-14 h-14 text-blue-500 mb-8"></i>
+                        <h4 class="text-3xl font-bold mb-4">Network Infrastructure</h4>
+                        <p class="text-slate-500 text-base leading-relaxed">Chuyên gia cấu hình MikroTik, Aruba, Cisco và các hệ thống WiFi diện rộng, đảm bảo kết nối ổn định cho hàng trăm user.</p>
+                    </div>
+                </div>
+                <div class="p-10 glass rounded-[2.5rem] tilt-card">
+                    <div class="tilt-content">
+                        <i data-lucide="code-2" class="w-12 h-12 text-cyan-400 mb-6"></i>
+                        <h4 class="text-xl font-bold mb-3">Programming</h4>
+                        <p class="text-slate-500 text-sm">C#, C++, SQL & Web Tech. Đang nghiên cứu sâu về phần mềm.</p>
+                    </div>
+                </div>
+                <div class="p-10 glass rounded-[2.5rem] tilt-card">
+                    <div class="tilt-content">
+                        <i data-lucide="bot" class="w-12 h-12 text-indigo-400 mb-6"></i>
+                        <h4 class="text-xl font-bold mb-3">AI & Automation</h4>
+                        <p class="text-slate-500 text-sm">Tích hợp các mô hình AI vào quy trình báo cáo và quản lý thiết bị.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Core Values Section (New) -->
+    <section class="py-40 border-y border-white/5 bg-white/[0.01]">
+        <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-16">
+            <div class="text-center" data-aos="fade-up">
+                <div class="w-20 h-20 bg-blue-600/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
+                    <i data-lucide="shield-check" class="w-10 h-10 text-blue-500"></i>
+                </div>
+                <h4 class="text-2xl font-bold mb-4">An toàn & Bảo mật</h4>
+                <p class="text-slate-500 text-sm leading-relaxed">Luôn ưu tiên tính bảo mật và toàn vẹn dữ liệu trong mọi cấu hình hệ thống mạng và tài khoản.</p>
+            </div>
+            <div class="text-center" data-aos="fade-up" data-aos-delay="100">
+                <div class="w-20 h-20 bg-cyan-600/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
+                    <i data-lucide="zap" class="w-10 h-10 text-cyan-500"></i>
+                </div>
+                <h4 class="text-2xl font-bold mb-4">Tối ưu hiệu năng</h4>
+                <p class="text-slate-500 text-sm leading-relaxed">Tối ưu hóa băng thông (PCC) và tài nguyên phần cứng để mang lại trải nghiệm tốt nhất cho người dùng.</p>
+            </div>
+            <div class="text-center" data-aos="fade-up" data-aos-delay="200">
+                <div class="w-20 h-20 bg-indigo-600/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
+                    <i data-lucide="repeat" class="w-10 h-10 text-indigo-500"></i>
+                </div>
+                <h4 class="text-2xl font-bold mb-4">Hỗ trợ tận tâm</h4>
+                <p class="text-slate-500 text-sm leading-relaxed">Hỗ trợ kỹ thuật nhanh chóng, giải quyết triệt để các sự cố từ phần cứng đến phần mềm và hệ thống.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Experience Timeline -->
+    <section id="experience" class="py-48 bg-white/[0.02]">
+        <div class="max-w-5xl mx-auto px-6">
+            <h2 class="text-center text-sm font-black text-blue-500 uppercase tracking-[0.4em] mb-4" data-aos="fade-up">Professional Path</h2>
+            <h3 class="text-center text-5xl md:text-7xl font-bold mb-32 tracking-tighter" data-aos="fade-up" data-aos-delay="100">Hành trình sự nghiệp.</h3>
+            
+            <div class="relative space-y-24">
+                <div class="absolute left-0 md:left-1/2 top-0 bottom-0 w-[1px] bg-gradient-to-b from-blue-500/50 via-white/10 to-transparent hidden md:block"></div>
+                
+                <!-- Exp 1: Sâm Ngọc Linh -->
+                <div class="relative flex flex-col md:flex-row items-center justify-between" data-aos="fade-up">
+                    <div class="w-full md:w-[45%] mb-12 md:mb-0">
+                        <div class="p-10 glass rounded-[2.5rem] border-l-4 border-blue-600 shadow-2xl">
+                            <span class="px-4 py-1 rounded-full bg-blue-600/20 text-blue-400 text-[10px] font-black uppercase tracking-widest">4/2026 - Present</span>
+                            <h4 class="text-3xl font-bold mt-6 mb-2">IT Support Specialist</h4>
+                            <p class="text-slate-300 font-bold text-lg mb-6">Tập đoàn Y Dược Sâm Ngọc Linh Việt Nam</p>
+                            <ul class="space-y-4 text-slate-500 text-sm">
+                                <li class="flex gap-3"><i data-lucide="check-circle-2" class="w-5 h-5 text-blue-500 flex-shrink-0"></i> Quản lý và bảo trì toàn bộ hạ tầng thiết bị CNTT của tập đoàn.</li>
+                                <li class="flex gap-3"><i data-lucide="check-circle-2" class="w-5 h-5 text-blue-500 flex-shrink-0"></i> Quản trị vận hành Website, hệ thống tên miền (Domain) và Hosting.</li>
+                                <li class="flex gap-3"><i data-lucide="check-circle-2" class="w-5 h-5 text-blue-500 flex-shrink-0"></i> Quản lý tài khoản doanh nghiệp, phân quyền truy cập và bảo mật dữ liệu.</li>
+                                <li class="flex gap-3"><i data-lucide="check-circle-2" class="w-5 h-5 text-blue-500 flex-shrink-0"></i> Hỗ trợ kỹ thuật onsite và remote cho cán bộ nhân viên.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="hidden md:flex absolute left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-blue-600 shadow-[0_0_30px_rgba(37,99,235,1)] z-10 border-4 border-[#030712]"></div>
+                    <div class="w-full md:w-[45%]"></div>
+                </div>
+
+                <!-- Exp 2: IT Admin -->
+                <div class="relative flex flex-col md:flex-row items-center justify-between" data-aos="fade-up">
+                    <div class="w-full md:w-[45%] order-2 md:order-1"></div>
+                    <div class="hidden md:flex absolute left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-slate-700 z-10 border-4 border-[#030712]"></div>
+                    <div class="w-full md:w-[45%] mb-12 md:mb-0 order-1 md:order-2">
+                        <div class="p-10 glass rounded-[2.5rem] border-r-4 border-slate-700 text-right md:text-left shadow-xl">
+                            <span class="px-4 py-1 rounded-full bg-slate-700/30 text-slate-500 text-[10px] font-black uppercase tracking-widest">1/2025 - 2/2026</span>
+                            <h4 class="text-3xl font-bold mt-6 mb-2">IT Administrator</h4>
+                            <p class="text-slate-300 font-bold text-lg mb-6">Trường cao đẳng Việt Mỹ Hà Nội</p>
+                            <ul class="space-y-4 text-slate-500 text-sm">
+                                <li class="flex gap-3 md:justify-end lg:justify-start"><i data-lucide="check-circle-2" class="w-5 h-5 text-slate-600 flex-shrink-0"></i> Thiết kế và cấu hình hệ thống mạng (MikroTik RB2004, Aruba).</li>
+                                <li class="flex gap-3 md:justify-end lg:justify-start"><i data-lucide="check-circle-2" class="w-5 h-5 text-slate-600 flex-shrink-0"></i> Quản lý hạ tầng 12 AP Aruba, VLAN, Firewall, Load Balancing.</li>
+                                <li class="flex gap-3 md:justify-end lg:justify-start"><i data-lucide="check-circle-2" class="w-5 h-5 text-slate-600 flex-shrink-0"></i> Vận hành hệ thống theo tiêu chuẩn ISO, đề xuất mua sắm thiết bị.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Project Showcase (3D Cards) -->
+    <section id="projects" class="py-32 px-6">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-end mb-20 gap-8">
+                <div data-aos="fade-right">
+                    <h2 class="text-sm font-black text-blue-500 uppercase tracking-[0.4em] mb-4">Case Studies</h2>
+                    <h3 class="text-4xl md:text-6xl font-bold tracking-tighter">Dự án thực tế.</h3>
+                </div>
+                <p class="text-slate-500 max-w-md text-right hidden md:block" data-aos="fade-left">
+                    Những giải pháp kỹ thuật tôi đã trực tiếp triển khai, từ thiết kế sơ đồ đến cấu hình chi tiết từng thiết bị.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <!-- Project 1 -->
+                <div class="group relative p-1 bg-gradient-to-br from-blue-600/20 to-transparent rounded-[2rem] overflow-hidden" data-aos="fade-up">
+                    <div class="p-10 glass rounded-[1.8rem] h-full transition-all duration-700 group-hover:bg-blue-600/[0.03]">
+                        <div class="flex justify-between items-start mb-12">
+                            <div class="w-16 h-16 rounded-2xl bg-blue-600/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                                <i data-lucide="milestone" class="w-8 h-8 text-blue-500"></i>
+                            </div>
+                            <span class="text-[10px] font-black px-4 py-2 rounded-full glass border border-white/5 uppercase tracking-widest">Network Architecture</span>
+                        </div>
+                        <h4 class="text-3xl font-bold mb-6 tracking-tight">Hệ thống mạng Trường học</h4>
+                        <p class="text-slate-500 mb-8 leading-relaxed">
+                            Quy mô lớn với MikroTik RB2004, 12 AP Aruba, TP-Link Switches. Triển khai VLAN, Firewall, QoS và Load Balancing tối ưu cho hàng trăm người dùng.
+                        </p>
+                        <div class="flex gap-4">
+                            <div class="w-10 h-10 rounded-lg glass flex items-center justify-center hover:bg-white/10 transition cursor-pointer">
+                                <i data-lucide="layers" class="w-5 h-5 text-slate-400"></i>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg glass flex items-center justify-center hover:bg-white/10 transition cursor-pointer">
+                                <i data-lucide="external-link" class="w-5 h-5 text-slate-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project 2 -->
+                <div class="group relative p-1 bg-gradient-to-br from-cyan-600/20 to-transparent rounded-[2rem] overflow-hidden" data-aos="fade-up" data-aos-delay="200">
+                    <div class="p-10 glass rounded-[1.8rem] h-full transition-all duration-700 group-hover:bg-cyan-600/[0.03]">
+                        <div class="flex justify-between items-start mb-12">
+                            <div class="w-16 h-16 rounded-2xl bg-cyan-600/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                                <i data-lucide="monitor-dot" class="w-8 h-8 text-cyan-500"></i>
+                            </div>
+                            <span class="text-[10px] font-black px-4 py-2 rounded-full glass border border-white/5 uppercase tracking-widest">Digital Infrastructure</span>
+                        </div>
+                        <h4 class="text-3xl font-bold mb-6 tracking-tight">Phòng máy học tập 4.0</h4>
+                        <p class="text-slate-500 mb-8 leading-relaxed">
+                            Set-up 60 trạm máy tính, tối ưu hóa qua phần mềm SafeBrowser chống gian lận, triển khai hệ thống quản trị tập trung ổn định cao.
+                        </p>
+                        <div class="flex gap-4">
+                            <div class="w-10 h-10 rounded-lg glass flex items-center justify-center hover:bg-white/10 transition cursor-pointer">
+                                <i data-lucide="shield-check" class="w-5 h-5 text-slate-400"></i>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg glass flex items-center justify-center hover:bg-white/10 transition cursor-pointer">
+                                <i data-lucide="code" class="w-5 h-5 text-slate-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer / Contact -->
+    <footer id="contact" class="relative py-40 px-6 overflow-hidden">
+        <div class="hero-glow opacity-50"></div>
+        <div class="max-w-4xl mx-auto text-center relative z-10" data-aos="zoom-in">
+            <h2 class="text-sm font-black text-blue-500 uppercase tracking-[0.6em] mb-8">Get In Touch</h2>
+            <h3 class="text-5xl md:text-8xl font-black mb-16 tracking-tighter leading-none">
+                LÀM VIỆC <br> <span class="text-gradient">CÙNG NHAU.</span>
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
+                <a href="mailto:ntgiap19122004@gmail.com" class="p-8 glass rounded-3xl group">
+                    <i data-lucide="mail" class="w-8 h-8 mx-auto mb-4 text-slate-500 group-hover:text-blue-500 transition"></i>
+                    <p class="text-sm font-bold text-slate-400">Email Me</p>
+                </a>
+                <a href="tel:0966079532" class="p-8 glass rounded-3xl group">
+                    <i data-lucide="phone" class="w-8 h-8 mx-auto mb-4 text-slate-500 group-hover:text-blue-500 transition"></i>
+                    <p class="text-sm font-bold text-slate-400">Call Me</p>
+                </a>
+                <a href="https://facebook.com/ntgiap2004" target="_blank" class="p-8 glass rounded-3xl group">
+                    <i data-lucide="facebook" class="w-8 h-8 mx-auto mb-4 text-slate-500 group-hover:text-blue-500 transition"></i>
+                    <p class="text-sm font-bold text-slate-400">Facebook</p>
+                </a>
+            </div>
+
+            <div class="flex flex-col md:flex-row justify-between items-center gap-6 pt-20 border-t border-white/5 opacity-40">
+                <p class="text-[10px] font-black uppercase tracking-widest">&copy; 2026 NGUYEN TAI GIAP</p>
+                <div class="flex gap-8">
+                    <a href="#" class="text-[10px] font-black uppercase tracking-widest hover:text-blue-500 transition">LinkedIn</a>
+                    <a href="#" class="text-[10px] font-black uppercase tracking-widest hover:text-blue-500 transition">GitHub</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        // Custom Cursor Logic
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorOutline = document.querySelector('.cursor-outline');
+
+        window.addEventListener('mousemove', (e) => {
+            const posX = e.clientX;
+            const posY = e.clientY;
+
+            cursorDot.style.left = `${posX}px`;
+            cursorDot.style.top = `${posY}px`;
+
+            // cursorOutline.style.left = `${posX}px`;
+            // cursorOutline.style.top = `${posY}px`;
+
+            cursorOutline.animate({
+                left: `${posX}px`,
+                top: `${posY}px`
+            }, { duration: 500, fill: "forwards" });
+        });
+
+        // Hover effect for cursor
+        const links = document.querySelectorAll('a, button, .glass');
+        links.forEach(link => {
+            link.addEventListener('mouseenter', () => {
+                cursorOutline.style.transform = 'translate(-50%, -50%) scale(1.5)';
+                cursorOutline.style.background = 'rgba(59, 130, 246, 0.1)';
+                cursorOutline.style.border = 'none';
+            });
+            link.addEventListener('mouseleave', () => {
+                cursorOutline.style.transform = 'translate(-50%, -50%) scale(1)';
+                cursorOutline.style.background = 'transparent';
+                cursorOutline.style.border = '2px solid var(--primary)';
+            });
+        });
+
+        // Preloader Logic
+        window.addEventListener('load', () => {
+            const loaderProgress = document.getElementById('loader-progress');
+            const preloader = document.getElementById('preloader');
+            
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 30;
+                if(progress > 100) progress = 100;
+                loaderProgress.style.width = `${progress}%`;
+                
+                if(progress === 100) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        preloader.style.opacity = '0';
+                        setTimeout(() => {
+                            preloader.style.display = 'none';
+                            AOS.init({
+                                duration: 1000,
+                                once: false,
+                                mirror: true
+                            });
+                        }, 1000);
+                    }, 500);
+                }
+            }, 150);
+        });
+
+        // 3D Particles Background
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 2000;
+        const posArray = new Float32Array(particlesCount * 3);
+        const initialPosArray = new Float32Array(particlesCount * 3);
+
+        for(let i = 0; i < particlesCount * 3; i++) {
+            const val = (Math.random() - 0.5) * 10;
+            posArray[i] = val;
+            initialPosArray[i] = val;
+        }
+
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.008,
+            color: '#3b82f6',
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending
+        });
+
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        camera.position.z = 3;
+
+        let mouse = new THREE.Vector2(-100, -100);
+        let scrollY = window.scrollY;
+        let targetScrollY = window.scrollY;
+
+        document.addEventListener('mousemove', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        });
+
+        window.addEventListener('scroll', () => {
+            targetScrollY = window.scrollY;
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            scrollY += (targetScrollY - scrollY) * 0.05;
+            
+            const positions = particlesGeometry.attributes.position.array;
+            const scrollFactor = scrollY * 0.002;
+            
+            for(let i = 0; i < particlesCount; i++) {
+                const ix = i * 3;
+                const iy = i * 3 + 1;
+
+                let baseX = initialPosArray[ix];
+                let baseY = initialPosArray[iy] + scrollFactor; 
+                
+                if (baseY > 5) baseY = -5 + (baseY % 5);
+                if (baseY < -5) baseY = 5 + (baseY % 5);
+
+                const dx = mouse.x * 3.5 - baseX;
+                const dy = mouse.y * 2.0 - baseY;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                if(dist < 0.8) {
+                    const force = (0.8 - dist) * 0.5;
+                    positions[ix] = baseX - (dx / dist) * force;
+                    positions[iy] = baseY - (dy / dist) * force;
+                } else {
+                    positions[ix] += (baseX - positions[ix]) * 0.1;
+                    positions[iy] += (baseY - positions[iy]) * 0.1;
+                }
+            }
+            
+            particlesGeometry.attributes.position.needsUpdate = true;
+            particlesMesh.rotation.y += 0.0003;
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        lucide.createIcons();
+
+        window.addEventListener('scroll', () => {
+            const nav = document.querySelector('nav');
+            if(window.scrollY > 100) {
+                nav.style.padding = '1rem 3rem';
+                nav.style.background = 'rgba(3, 7, 18, 0.9)';
+            } else {
+                nav.style.padding = '1.25rem 3rem';
+                nav.style.background = 'rgba(255, 255, 255, 0.02)';
+            }
+        });
+    </script>
+</body>
+</html>
